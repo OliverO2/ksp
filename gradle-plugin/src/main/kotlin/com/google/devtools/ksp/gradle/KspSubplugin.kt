@@ -237,7 +237,7 @@ class KspGradleSubplugin @Inject internal constructor(private val registry: Tool
         val kotlinCompileTask = kotlinCompileProvider.get()
         val sourceSetOptions = kspConfigurations.resolvedSourceSetOptions(kotlinCompilation)
 
-        fun Task.addKspMetadataDependencyIfExists(sourceSetName: String) {
+        fun Task.addParentKspTaskDependencyIfExists(sourceSetName: String) {
             val parentKspTaskName = lowerCamelCased("ksp", sourceSetName, "KotlinMetadata")
 
             project.locateTask<KspTask>(parentKspTaskName)?.let { parentKspTask ->
@@ -252,9 +252,9 @@ class KspGradleSubplugin @Inject internal constructor(private val registry: Tool
             kspTask.processorClasspath.from(processorClasspath)
             kspTask.dependsOn(processorClasspath.buildDependencies)
 
-            // depends on KSP tasks for parent source sets
+            // depends on outputs of KSP tasks for parent source sets
             kotlinCompilation.parentSourceSetsBottomUp().forEach { sourceSet ->
-                kspTask.addKspMetadataDependencyIfExists(sourceSet.name)
+                kspTask.addParentKspTaskDependencyIfExists(sourceSet.name)
             }
 
             kspTask.options.addAll(
@@ -313,9 +313,13 @@ class KspGradleSubplugin @Inject internal constructor(private val registry: Tool
                     }
                 }
             } else {
-                kotlinCompilation.allKotlinSourceSets.forEach { sourceSet -> kspTask.source(sourceSet.kotlin) }
-                if (kotlinCompilation is KotlinCommonCompilation) {
-                    kspTask.source(kotlinCompilation.defaultSourceSet.kotlin)
+                if (multiplatformEnabled) {
+                    kotlinCompilation.allSourceSetsBottomUp().forEach { sourceSet -> kspTask.source(sourceSet.kotlin) }
+                } else {
+                    kotlinCompilation.allKotlinSourceSets.forEach { sourceSet -> kspTask.source(sourceSet.kotlin) }
+                    if (kotlinCompilation is KotlinCommonCompilation) {
+                        kspTask.source(kotlinCompilation.defaultSourceSet.kotlin)
+                    }
                 }
             }
 
@@ -373,7 +377,7 @@ class KspGradleSubplugin @Inject internal constructor(private val registry: Tool
         kotlinCompileProvider.configure { kotlinCompile ->
             kotlinCompile.dependsOn(kspTaskProvider)
             kotlinCompilation.parentSourceSetsBottomUp().forEach { sourceSet ->
-                kotlinCompile.addKspMetadataDependencyIfExists(sourceSet.name)
+                kotlinCompile.addParentKspTaskDependencyIfExists(sourceSet.name)
             }
 
             kotlinCompile.source(kotlinOutputDir, javaOutputDir)
